@@ -101,7 +101,9 @@ def start_round():
 def next_trick():
     G.last_trick = []; G.current_trick = []; G.trick_num += 1
 
-def resolve_trick():
+async def resolve_trick_after_delay():
+    """Broadcast the complete trick for 2s so everyone sees it, then resolve."""
+    await asyncio.sleep(2.0)
     winner_entry = min(G.current_trick, key=lambda e: card_rank(e['card'], G.card_order))
     winner = winner_entry['player']
     G.tricks_won[winner] += 1
@@ -118,6 +120,7 @@ def resolve_trick():
         G.round_results = results; G.phase = 'round_result'
     else:
         next_trick()
+    await broadcast()
 
 async def ws_handler(request):
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=1024*1024)
@@ -175,8 +178,12 @@ async def ws_handler(request):
                     if ci is None or not (0 <= int(ci) < len(hand)): await send_error(ws,'Invalid card.'); continue
                     card = hand.pop(int(ci))
                     G.current_trick.append({'player':player_name,'card':card})
-                    if len(G.current_trick) == len(alive): resolve_trick()
-                    await broadcast()
+                    if len(G.current_trick) == len(alive):
+                        # Broadcast with all cards visible first, then resolve after delay
+                        await broadcast()
+                        asyncio.ensure_future(resolve_trick_after_delay())
+                    else:
+                        await broadcast()
 
                 elif action == 'next_round':
                     if player_name != G.host: continue
@@ -212,7 +219,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>FDP</title>
+<title>Trick Game</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -251,22 +258,22 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .btn-gold:hover{background:var(--gold2)}
 
 /* ── TOPBAR ── */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:.55rem 1.1rem;background:var(--sur);border-bottom:1px solid var(--bor);flex-shrink:0;gap:.5rem;flex-wrap:wrap;min-height:44px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem;background:var(--sur);border-bottom:1px solid var(--bor);flex-shrink:0;gap:.6rem;flex-wrap:wrap;min-height:60px}
 .tbl{display:flex;align-items:center;gap:.65rem}
-.topbar h1{font-size:1rem;letter-spacing:.04em}
-.rtag{font-size:11px;color:var(--muted);background:var(--sur2);border:1px solid var(--bor);border-radius:20px;padding:2px 9px;white-space:nowrap}
+.topbar h1{font-size:1.35rem;letter-spacing:.04em}
+.rtag{font-size:13px;color:var(--muted);background:var(--sur2);border:1px solid var(--bor);border-radius:20px;padding:3px 12px;white-space:nowrap}
 .cdot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex-shrink:0}
 .cdot.on{background:var(--green)}.cdot.off{background:var(--red2)}
 .seqt{display:flex;gap:3px;align-items:center}
-.spip{width:21px;height:21px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;color:var(--dim);border:1px solid var(--bor);flex-shrink:0}
+.spip{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--dim);border:1px solid var(--bor);flex-shrink:0}
 .spip.done{color:var(--muted);background:var(--sur2)}.spip.now{background:var(--gold);color:#111;border-color:var(--gold);font-weight:700}
 
 /* ── TRUMP BAR ── */
-.tbar{display:flex;align-items:center;gap:.85rem;padding:.45rem 1.1rem;background:var(--sur2);border-bottom:1px solid var(--bor);flex-shrink:0;flex-wrap:wrap}
-.tlabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px}
-.tchip{display:inline-flex;align-items:center;gap:.25rem;background:var(--sur3);border:1px solid var(--gold);border-radius:var(--r3);padding:3px 9px;font-weight:700;font-size:1rem}
+.tbar{display:flex;align-items:center;gap:1.1rem;padding:.7rem 1.4rem;background:var(--sur2);border-bottom:1px solid var(--bor);flex-shrink:0;flex-wrap:wrap}
+.tlabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px}
+.tchip{display:inline-flex;align-items:center;gap:.3rem;background:var(--sur3);border:1px solid var(--gold);border-radius:var(--r3);padding:5px 13px;font-weight:700;font-size:1.4rem}
 .opills{display:flex;gap:3px;flex-wrap:wrap}
-.opill{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--sur3);color:var(--muted);border:1px solid var(--bor)}
+.opill{font-size:13px;padding:3px 10px;border-radius:20px;background:var(--sur3);color:var(--muted);border:1px solid var(--bor)}
 .opill.top{background:var(--gold-dim);color:var(--gold);border-color:var(--gold)}
 
 /* ── FELT TABLE ── */
@@ -278,14 +285,14 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 
 /* ── SEATS ── */
 .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:3px;transform:translate(-50%,-50%);z-index:2}
-.avatar{width:54px;height:54px;border-radius:50%;background:var(--sur);border:2px solid var(--bor2);display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:.95rem;font-weight:700;color:var(--gold);transition:border-color .2s,box-shadow .2s;position:relative;flex-shrink:0;cursor:default}
+.avatar{width:68px;height:68px;border-radius:50%;background:var(--sur);border:2px solid var(--bor2);display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:1.1rem;font-weight:700;color:var(--gold);transition:border-color .2s,box-shadow .2s;position:relative;flex-shrink:0;cursor:default}
 .avatar.my-turn{border-color:var(--gold2);box-shadow:0 0 0 3px var(--gold-dim),0 0 22px rgba(201,168,76,.25)}
 .avatar.is-me{border-color:var(--green)}
 .avatar.out{opacity:.3;filter:grayscale(1)}
-.sname{font-size:11px;font-weight:500;color:var(--text);max-width:72px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.6);border-radius:4px;padding:1px 5px;line-height:1.4}
+.sname{font-size:12px;font-weight:500;color:var(--text);max-width:80px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.6);border-radius:4px;padding:2px 7px;line-height:1.4}
 .sname.is-me{color:var(--green)}
 .shearts{display:flex;gap:2px;justify-content:center}
-.sh{font-size:9px;line-height:1}.sh.a{color:var(--heart)}.sh.d{color:var(--dim)}
+.sh{font-size:11px;line-height:1}.sh.a{color:var(--heart)}.sh.d{color:var(--dim)}
 .bid-badge{position:absolute;top:-5px;right:-5px;background:var(--sur);border:1px solid var(--gold);border-radius:10px;font-size:10px;font-weight:600;color:var(--gold);padding:1px 5px;line-height:1.4;white-space:nowrap}
 .won-badge{position:absolute;bottom:-5px;right:-5px;background:var(--green-bg);border:1px solid var(--green);border-radius:10px;font-size:10px;font-weight:600;color:var(--green);padding:1px 5px;line-height:1.4}
 
@@ -293,35 +300,35 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .pot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1}
 .pot-inner{display:flex;flex-direction:column;align-items:center;gap:.4rem;max-width:260px}
 .trick-row{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
-.tc{width:36px;height:52px;border-radius:5px;background:#131313;border:1px solid #2a2a2a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;position:relative;flex-shrink:0}
+.tc{width:52px;height:74px;border-radius:7px;background:#131313;border:1px solid #2a2a2a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;position:relative;flex-shrink:0}
 .tc.winner-card{border-color:var(--gold);box-shadow:0 0 8px rgba(201,168,76,.4)}
-.tc .cs{font-size:.55rem;opacity:.65}
+.tc .cs{font-size:.7rem;opacity:.65}
 .tc.hearts{color:var(--heart)}.tc.spades{color:var(--spade)}.tc.diamonds{color:var(--diamond)}.tc.clubs{color:var(--club)}
-.tc-name{font-size:9px;color:rgba(255,255,255,.45);text-align:center;max-width:38px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.tc-name{font-size:11px;color:rgba(255,255,255,.45);text-align:center;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
 .trick-entry{display:flex;flex-direction:column;align-items:center}
-.pot-msg{font-size:11px;color:rgba(255,255,255,.35);font-family:'Cinzel',serif;letter-spacing:.06em;text-align:center}
+.pot-msg{font-size:13px;color:rgba(255,255,255,.45);font-family:'Cinzel',serif;letter-spacing:.06em;text-align:center}
 .lt-label{font-size:9px;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:.08em;text-align:center}
 
 /* ── HAND PANEL ── */
-#hand-panel{background:var(--sur);border-top:1px solid var(--bor);padding:.65rem 1rem 1rem;flex-shrink:0}
+#hand-panel{background:var(--sur);border-top:1px solid var(--bor);padding:.85rem 1.2rem 1.2rem;flex-shrink:0}
 .hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.55rem;flex-wrap:wrap;gap:.35rem}
-.htitle{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
-.ti{font-size:11px;font-weight:500;padding:3px 11px;border-radius:20px}
+.htitle{font-size:13px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.ti{font-size:13px;font-weight:500;padding:4px 14px;border-radius:20px}
 .ti.mine{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold)}
 .ti.wait{background:var(--sur2);color:var(--muted);border:1px solid var(--bor)}
 .cards-row{display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end;justify-content:center}
-.hcard{width:44px;height:62px;border-radius:6px;background:var(--sur2);border:1.5px solid var(--bor2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1rem;transition:transform .11s,border-color .11s,box-shadow .11s;user-select:none;flex-shrink:0}
-.hcard.pick{cursor:pointer}.hcard.pick:hover{transform:translateY(-7px)}
-.hcard.selected{transform:translateY(-11px);border-color:var(--gold);box-shadow:0 0 12px var(--gold-dim)}
-.hcard .cs{font-size:.58rem;opacity:.7}
+.hcard{width:62px;height:88px;border-radius:8px;background:var(--sur2);border:1.5px solid var(--bor2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.4rem;transition:transform .11s,border-color .11s,box-shadow .11s;user-select:none;flex-shrink:0}
+.hcard.pick{cursor:pointer}.hcard.pick:hover{transform:translateY(-10px)}
+.hcard.selected{transform:translateY(-14px);border-color:var(--gold);box-shadow:0 0 16px var(--gold-dim)}
+.hcard .cs{font-size:.75rem;opacity:.7}
 .hcard.hearts{color:var(--heart)}.hcard.spades{color:var(--spade)}.hcard.diamonds{color:var(--diamond)}.hcard.clubs{color:var(--club)}
 .pbrow{display:flex;align-items:center;gap:.75rem;margin-top:.55rem;justify-content:center}
 
 /* ── BID PANEL ── */
 #bid-panel{background:var(--sur);border-top:1px solid var(--bor);padding:.65rem 1rem;flex-shrink:0}
 .bhand{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:.55rem}
-.bcard{width:36px;height:52px;border-radius:5px;background:var(--sur2);border:1px solid var(--bor);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:.85rem}
-.bcard .cs{font-size:.52rem;opacity:.7}
+.bcard{width:50px;height:70px;border-radius:6px;background:var(--sur2);border:1px solid var(--bor);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.15rem}
+.bcard .cs{font-size:.68rem;opacity:.7}
 .bcard.hearts{color:var(--heart)}.bcard.spades{color:var(--spade)}.bcard.diamonds{color:var(--diamond)}.bcard.clubs{color:var(--club)}
 .bidr{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap}
 .binp{width:72px;background:var(--sur2);border:1px solid var(--bor2);border-radius:var(--r3);color:var(--text);padding:.45rem .65rem;font-size:1.1rem;font-weight:600;font-family:'Inter',sans-serif;outline:none;text-align:center;transition:border .2s}
@@ -358,9 +365,9 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 #toast{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);background:var(--sur2);border:1px solid var(--bor2);color:var(--text);padding:.5rem 1.1rem;border-radius:var(--r3);font-size:13px;display:none;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.6);max-width:88vw;text-align:center}
 
 @media(max-width:480px){
-  .felt{aspect-ratio:1;width:min(320px,95vw)}
-  .avatar{width:44px;height:44px;font-size:.82rem}
-  .hcard{width:38px;height:55px;font-size:.9rem}
+  .felt{aspect-ratio:1;width:min(340px,95vw)}
+  .avatar{width:54px;height:54px;font-size:.9rem}
+  .hcard{width:52px;height:74px;font-size:1.2rem}
 }
 </style>
 </head>
@@ -370,7 +377,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <div class="screen active" id="s-join">
   <div class="jcard">
     <div class="suits">♠ ♥ ♦ ♣</div>
-    <h1>FDP</h1>
+    <h1>Trick Game</h1>
     <p>Enter your name to join the table</p>
     <input class="inp" id="inp-name" placeholder="Your name" maxlength="20">
     <button class="btn btn-gold" onclick="joinGame()" style="width:100%">Join table</button>
@@ -381,7 +388,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <!-- LOBBY -->
 <div class="screen" id="s-lobby">
   <div class="topbar">
-    <div class="tbl"><h1>FDP</h1><span class="rtag">Lobby</span></div>
+    <div class="tbl"><h1>Trick Game</h1><span class="rtag">Lobby</span></div>
     <div style="display:flex;align-items:center;gap:.45rem"><span class="cdot on" id="cdot-l"></span><span style="color:var(--muted);font-size:11px">Connected</span></div>
   </div>
   <div class="lwrap">
@@ -410,7 +417,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <div class="screen" id="s-game">
   <div class="topbar">
     <div class="tbl">
-      <h1>FDP</h1>
+      <h1>Trick Game</h1>
       <span class="rtag" id="round-tag">Round 1</span>
       <div class="seqt" id="seq-track"></div>
     </div>
@@ -421,7 +428,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
     <div><div class="tlabel" style="margin-bottom:3px">Card order (strongest → weakest)</div><div class="opills" id="order-pills"></div></div>
     <div style="margin-left:auto;text-align:right">
       <div class="tlabel">Trick</div>
-      <div style="font-size:1rem;font-weight:600;font-family:'Cinzel',serif;color:var(--text)" id="trick-ctr">—</div>
+      <div style="font-size:1.35rem;font-weight:600;font-family:'Cinzel',serif;color:var(--text)" id="trick-ctr">—</div>
     </div>
   </div>
   <div id="table-wrap">
@@ -638,12 +645,14 @@ function renderGame() {
   if (ph==='playing' && s.current_trick.length>0) {
     let best=Infinity, winP=null;
     s.current_trick.forEach(e=>{const r=cr(e.card,s.card_order);if(r<best){best=r;winP=e.player;}});
+    const trickFull = s.current_trick.length >= alive.length;
     ph2+=`<div class="trick-row">${s.current_trick.map(e=>{const w=e.player===winP;
       return `<div class="trick-entry">
         <div class="tc-name">${esc(e.player)}</div>
         <div class="tc ${SC[e.card.s]}${w?' winner-card':''}">${e.card.v}<span class="cs">${SY[e.card.s]}</span></div>
       </div>`;}).join('')}</div>`;
-    if (trickP) ph2+=`<div class="pot-msg">${esc(trickP)}'s turn</div>`;
+    if (trickFull) ph2+=`<div class="pot-msg" style="color:var(--gold2)">${esc(winP)} wins this trick!</div>`;
+    else if (trickP) ph2+=`<div class="pot-msg">${esc(trickP)}'s turn</div>`;
   } else if (ph==='playing') {
     if (s.last_trick&&s.last_trick.length) {
       let best=Infinity,winP=null;
