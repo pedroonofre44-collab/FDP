@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Card Trick Game — Railway-ready. Single port HTTP+WebSocket."""
+"""Card FDP — Railway-ready. Single port HTTP+WebSocket."""
 
 import asyncio, json, os, random
 from aiohttp import web
@@ -219,7 +219,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Trick Game</title>
+<title>FDP</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -377,7 +377,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <div class="screen active" id="s-join">
   <div class="jcard">
     <div class="suits">♠ ♥ ♦ ♣</div>
-    <h1>Trick Game</h1>
+    <h1>FDP</h1>
     <p>Enter your name to join the table</p>
     <input class="inp" id="inp-name" placeholder="Your name" maxlength="20">
     <button class="btn btn-gold" onclick="joinGame()" style="width:100%">Join table</button>
@@ -388,7 +388,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <!-- LOBBY -->
 <div class="screen" id="s-lobby">
   <div class="topbar">
-    <div class="tbl"><h1>Trick Game</h1><span class="rtag">Lobby</span></div>
+    <div class="tbl"><h1>FDP</h1><span class="rtag">Lobby</span></div>
     <div style="display:flex;align-items:center;gap:.45rem"><span class="cdot on" id="cdot-l"></span><span style="color:var(--muted);font-size:11px">Connected</span></div>
   </div>
   <div class="lwrap">
@@ -417,7 +417,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <div class="screen" id="s-game">
   <div class="topbar">
     <div class="tbl">
-      <h1>Trick Game</h1>
+      <h1>FDP</h1>
       <span class="rtag" id="round-tag">Round 1</span>
       <div class="seqt" id="seq-track"></div>
     </div>
@@ -668,9 +668,22 @@ function renderGame() {
   pi.innerHTML=ph2;
 
   // ── Panels ───────────────────────────────────────────────────────────────
+  // Hand panel: visible during BOTH bidding and playing so players can always see their cards
+  document.getElementById('hand-panel').style.display=(ph==='bidding'||ph==='playing')?'block':'none';
   document.getElementById('bid-panel').style.display=isMyBid?'block':'none';
-  document.getElementById('hand-panel').style.display=ph==='playing'?'block':'none';
   document.getElementById('pbrow').style.display=isMyPlay?'flex':'none';
+
+  if (ph==='bidding') {
+    // Show hand (read-only) to everyone during bidding phase
+    const ti=document.getElementById('ti-hand');
+    if (isMyBid) {
+      ti.textContent='Place your bid below'; ti.className='ti mine';
+    } else {
+      const waitingFor=s.bid_order[s.bid_idx]||'';
+      ti.textContent='Waiting for '+esc(waitingFor)+' to bid'; ti.className='ti wait';
+    }
+    renderHand(s.my_hand||[], false);  // show cards but not selectable yet
+  }
 
   if (isMyBid) {
     document.getElementById('bid-max').textContent=nc;
