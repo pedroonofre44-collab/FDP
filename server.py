@@ -370,7 +370,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <div class="screen active" id="s-join">
   <div class="jcard">
     <div class="suits">♠ ♥ ♦ ♣</div>
-    <h1>Trick Game</h1>
+    <h1>FDP</h1>
     <p>Enter your name to join the table</p>
     <input class="inp" id="inp-name" placeholder="Your name" maxlength="20">
     <button class="btn btn-gold" onclick="joinGame()" style="width:100%">Join table</button>
@@ -381,7 +381,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <!-- LOBBY -->
 <div class="screen" id="s-lobby">
   <div class="topbar">
-    <div class="tbl"><h1>Trick Game</h1><span class="rtag">Lobby</span></div>
+    <div class="tbl"><h1>FDP</h1><span class="rtag">Lobby</span></div>
     <div style="display:flex;align-items:center;gap:.45rem"><span class="cdot on" id="cdot-l"></span><span style="color:var(--muted);font-size:11px">Connected</span></div>
   </div>
   <div class="lwrap">
@@ -410,7 +410,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 <div class="screen" id="s-game">
   <div class="topbar">
     <div class="tbl">
-      <h1>Trick Game</h1>
+      <h1>FDP</h1>
       <span class="rtag" id="round-tag">Round 1</span>
       <div class="seqt" id="seq-track"></div>
     </div>
