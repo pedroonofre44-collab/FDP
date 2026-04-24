@@ -41,10 +41,11 @@ def deal_cards(num_cards, players):
 
 class Room:
     def __init__(self, code, name):
-        self.code    = code
-        self.name    = name
-        self.clients = {}   # player_name -> ws
-        self.g       = GameState()
+        self.code     = code
+        self.name     = name
+        self.clients  = {}   # player_name -> ws
+        self.g        = GameState()
+        self.chat_log = []   # list of {player, text, ts}
 
     def player_count(self):
         return len(self.g.players)
@@ -105,7 +106,17 @@ async def broadcast_room(room):
     for name, ws in list(room.clients.items()):
         try:
             await ws.send_json({'type':'state','state':room.g.to_player(name),
-                                'room_code':room.code,'room_name':room.name})
+                                'room_code':room.code,'room_name':room.name,
+                                'chat_log':room.chat_log[-80:]})
+        except: dead.append(name)
+    for n in dead: room.clients.pop(n, None)
+
+async def broadcast_chat(room):
+    """Send only a chat update (lighter than full state)."""
+    dead = []
+    for name, ws in list(room.clients.items()):
+        try:
+            await ws.send_json({'type':'chat','chat_log':room.chat_log[-80:]})
         except: dead.append(name)
     for n in dead: room.clients.pop(n, None)
 
@@ -194,6 +205,8 @@ async def ws_handler(request):
                     player_name = name; room.clients[name] = ws
                     if name not in g.players: g.players.append(name); g.lives[name]=5
                     if g.host is None: g.host = name
+                    import time
+                    room.chat_log.append({'player':'','text':f'{name} joined the table','ts':int(time.time()),'system':True})
                     await broadcast_room(room)
 
                 elif action == 'start':
@@ -251,6 +264,14 @@ async def ws_handler(request):
                     g.players=names; g.lives={n:5 for n in names}
                     g.host=names[0] if names else None
                     await broadcast_room(room)
+
+                elif action == 'chat':
+                    text = str(data.get('text','')).strip()[:200]
+                    if not text or not player_name: continue
+                    import time
+                    room.chat_log.append({'player':player_name,'text':text,'ts':int(time.time())})
+                    if len(room.chat_log) > 200: room.chat_log = room.chat_log[-200:]
+                    await broadcast_chat(room)
 
             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSE):
                 break
@@ -519,11 +540,40 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .wait{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:.35rem}
 .dot::after{content:'...';animation:blink 1.2s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+/* ── CHAT ── */
+#chat-btn{position:fixed;bottom:1.4rem;right:1.2rem;width:52px;height:52px;border-radius:50%;background:var(--gold);border:none;color:#111;font-size:1.3rem;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:50;transition:transform .15s}
+#chat-btn:hover{transform:scale(1.08)}
+#chat-badge{position:absolute;top:-3px;right:-3px;background:var(--red2);color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:700;display:none;align-items:center;justify-content:center;line-height:1}
+#chat-panel{position:fixed;bottom:0;right:0;width:min(320px,100vw);height:min(460px,70vh);background:var(--sur);border-left:1px solid var(--bor2);border-top:1px solid var(--bor2);border-radius:var(--r) 0 0 0;display:none;flex-direction:column;z-index:200;box-shadow:-4px -4px 24px rgba(0,0,0,.5)}
+#chat-panel.open{display:flex}
+.chat-head{display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;border-bottom:1px solid var(--bor);flex-shrink:0}
+.chat-head-title{font-family:'Cinzel',serif;font-size:.85rem;color:var(--gold);font-weight:600}
+.chat-close{background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:0 .2rem;line-height:1}
+.chat-close:hover{color:var(--text)}
+#chat-msgs{flex:1;overflow-y:auto;padding:.6rem .85rem;display:flex;flex-direction:column;gap:.4rem;scroll-behavior:smooth}
+#chat-msgs::-webkit-scrollbar{width:4px}
+#chat-msgs::-webkit-scrollbar-track{background:transparent}
+#chat-msgs::-webkit-scrollbar-thumb{background:var(--bor2);border-radius:2px}
+.chat-msg{display:flex;flex-direction:column;gap:2px;max-width:85%}
+.chat-msg.mine{align-self:flex-end;align-items:flex-end}
+.chat-msg.other{align-self:flex-start}
+.chat-msg.system{align-self:center;max-width:100%}
+.chat-sender{font-size:10px;color:var(--muted);font-weight:500;padding:0 .3rem}
+.chat-bubble{padding:.4rem .75rem;border-radius:14px;font-size:13px;line-height:1.45;word-break:break-word}
+.chat-msg.mine .chat-bubble{background:var(--gold-dim);color:var(--text);border:1px solid rgba(201,168,76,.25);border-radius:14px 14px 3px 14px}
+.chat-msg.other .chat-bubble{background:var(--sur2);color:var(--text);border:1px solid var(--bor);border-radius:14px 14px 14px 3px}
+.chat-msg.system .chat-bubble{background:transparent;color:var(--dim);font-size:11px;font-style:italic;border:none;padding:.1rem .3rem;text-align:center}
+.chat-foot{display:flex;gap:.5rem;padding:.6rem .75rem;border-top:1px solid var(--bor);flex-shrink:0}
+#chat-input{flex:1;background:var(--sur2);border:1px solid var(--bor2);border-radius:20px;color:var(--text);padding:.45rem .9rem;font-size:13px;font-family:'Inter',sans-serif;outline:none;transition:border .2s}
+#chat-input:focus{border-color:var(--gold)}
+#chat-send{background:var(--gold);border:none;border-radius:50%;width:34px;height:34px;color:#111;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+#chat-send:hover{background:var(--gold2)}
 #toast{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);background:var(--sur2);border:1px solid var(--bor2);color:var(--text);padding:.5rem 1.1rem;border-radius:var(--r3);font-size:13px;display:none;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.6);max-width:88vw;text-align:center}
 @media(max-width:480px){
   .felt{aspect-ratio:1;width:min(340px,95vw)}
   .avatar{width:54px;height:54px;font-size:.9rem}
   .hcard{width:52px;height:74px;font-size:1.2rem}
+  #chat-panel{width:100vw;height:55vh;border-radius:var(--r) var(--r) 0 0;border-left:none}
 }
 </style>
 </head>
@@ -651,6 +701,25 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 
 <div id="toast"></div>
 
+<!-- CHAT BUTTON -->
+<button id="chat-btn" onclick="toggleChat()">
+  💬
+  <div id="chat-badge"></div>
+</button>
+
+<!-- CHAT PANEL -->
+<div id="chat-panel">
+  <div class="chat-head">
+    <span class="chat-head-title">Table Chat</span>
+    <button class="chat-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div id="chat-msgs"></div>
+  <div class="chat-foot">
+    <input id="chat-input" placeholder="Type a message..." maxlength="200">
+    <button id="chat-send" onclick="sendChat()">➤</button>
+  </div>
+</div>
+
 <script>
 const SC={Hearts:'hearts',Spades:'spades',Diamonds:'diamonds',Clubs:'clubs'};
 const SY={Hearts:'♥',Spades:'♠',Diamonds:'♦',Clubs:'♣'};
@@ -678,7 +747,8 @@ function connect(){
   ws.onmessage=e=>{
     try{
       const m=JSON.parse(e.data);
-      if(m.type==='state'){ S=m.state; render(); }
+      if(m.type==='state'){ S=m.state; if(m.chat_log) renderChat(m.chat_log); render(); }
+      else if(m.type==='chat'){ renderChat(m.chat_log); }
       else if(m.type==='error') toast(m.msg,true);
     }catch(err){}
   };
@@ -690,7 +760,7 @@ function setJoinStatus(msg,err){ const el=document.getElementById('join-status')
 function joinGame(){
   const n=document.getElementById('inp-name').value.trim();
   if(!n){ toast('Enter a name',true); return; }
-  myName=n; if(!send({action:'join',name:n})) setJoinStatus('Connecting...',false);
+  myName=n; showChatBtn(); if(!send({action:'join',name:n})) setJoinStatus('Connecting...',false);
 }
 function submitBid(){
   const v=parseInt(document.getElementById('bid-input').value);
@@ -874,6 +944,63 @@ let _tt;
 function toast(msg,err=false){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=err?'var(--red2)':'var(--bor2)';t.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>t.style.display='none',3500);}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 document.getElementById('inp-name').addEventListener('keydown',e=>{if(e.key==='Enter')joinGame();});
+
+// ── Chat ────────────────────────────────────────────────────────────────────
+let chatOpen=false, unread=0, lastChatLen=0;
+
+function toggleChat(){
+  chatOpen=!chatOpen;
+  document.getElementById('chat-panel').classList.toggle('open',chatOpen);
+  if(chatOpen){ unread=0; updateBadge(); scrollChat(); document.getElementById('chat-input').focus(); }
+}
+
+function sendChat(){
+  const inp=document.getElementById('chat-input');
+  const text=inp.value.trim();
+  if(!text) return;
+  send({action:'chat',text});
+  inp.value='';
+}
+
+document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+
+function renderChat(log){
+  if(!log||!log.length) return;
+  if(log.length===lastChatLen) return;
+  const newMsgs=log.length-lastChatLen;
+  lastChatLen=log.length;
+  const el=document.getElementById('chat-msgs');
+  el.innerHTML=log.map(m=>{
+    if(m.system) return `<div class="chat-msg system"><div class="chat-bubble">${esc(m.text)}</div></div>`;
+    const isMe=m.player===myName;
+    return `<div class="chat-msg ${isMe?'mine':'other'}">
+      ${!isMe?`<div class="chat-sender">${esc(m.player)}</div>`:''}
+      <div class="chat-bubble">${esc(m.text)}</div>
+    </div>`;
+  }).join('');
+  scrollChat();
+  if(!chatOpen && newMsgs>0){
+    unread+=newMsgs; updateBadge();
+  }
+}
+
+function scrollChat(){
+  const el=document.getElementById('chat-msgs');
+  el.scrollTop=el.scrollHeight;
+}
+
+function updateBadge(){
+  const badge=document.getElementById('chat-badge');
+  if(unread>0){ badge.textContent=unread>9?'9+':unread; badge.style.display='flex'; }
+  else badge.style.display='none';
+}
+
+// Show chat button once logged in
+function showChatBtn(){
+  const btn=document.getElementById('chat-btn');
+  btn.style.display='flex';
+}
+
 connect();
 </script>
 </body>
