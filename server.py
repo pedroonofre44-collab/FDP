@@ -798,7 +798,7 @@ function renderLobby(){
     `<div class="prow"><span style="font-weight:500">${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>
     <div style="display:flex;align-items:center;gap:.4rem">
       ${p===S.host?'<span class="hbadge host">host</span>':''}
-      ${lbar(S.lives[p]||5,5)}
+      ${lbar(S.lives[p]??5,5)}
     </div></div>`).join('')||'<div style="padding:.7rem;color:var(--dim);font-size:12px">No players yet</div>';
   document.getElementById('lobby-action').innerHTML=isHost
     ?`<button class="btn btn-gold" onclick="send({action:'start'})">Start game</button><div style="font-size:11px;color:var(--dim);margin-top:.3rem">You are the host</div>`
@@ -842,7 +842,7 @@ function renderGame(){
         ${ph==='playing'?`<div class="won-badge">${won}/${s.bids[p]??'?'}</div>`:''}
       </div>
       <div class="sname${isMe?' is-me':''}">${esc(p)}</div>
-      <div class="shearts">${shb(s.lives[p]||0,5)}</div>`;
+      <div class="shearts">${shb(s.lives[p]!=null?s.lives[p]:0,5)}</div>`;
     felt.appendChild(seat);
   });
 
@@ -920,7 +920,7 @@ function renderResult(){
     <span style="color:var(--muted);font-size:12px">bid ${r.bid} · won ${r.won}</span>
     <span class="rbdg ${ok?'ok':'bad'}">${ok?'Perfect':'-'+r.diff+' life'+(r.diff!==1?'s':'')}</span></div>`;}).join('');
   document.getElementById('res-lives').innerHTML=S.players.map(p=>
-    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(S.lives[p]||0,5)}</div>`).join('');
+    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(S.lives[p]!=null?S.lives[p]:0,5)}</div>`).join('');
   const isHost=S.host===myName;
   document.getElementById('res-action').innerHTML=isHost
     ?`<button class="btn btn-gold" onclick="send({action:'next_round'})">Next round →</button>`
@@ -932,7 +932,7 @@ function renderGameOver(){
   document.getElementById('go-name').textContent=alive.length===1?alive[0]:'Draw!';
   const sorted=[...S.players].sort((a,b)=>(S.lives[b]||0)-(S.lives[a]||0));
   document.getElementById('go-stands').innerHTML=sorted.map(p=>
-    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(S.lives[p]||0,5)}</div>`).join('');
+    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(S.lives[p]!=null?S.lives[p]:0,5)}</div>`).join('');
   document.getElementById('go-action').innerHTML=S.host===myName
     ?`<button class="btn btn-gold" onclick="send({action:'restart'})">Play again</button>`
     :`<div class="wait"><span>Waiting for host</span><span class="dot"></span></div>`;
@@ -940,8 +940,8 @@ function renderGameOver(){
 }
 
 function cr(card,order){const vi=order.indexOf(card.v),si=['Hearts','Spades','Diamonds','Clubs'].indexOf(card.s);return(vi<0?order.length:vi)*4+si;}
-function lbar(n,max){let h='<div class="lbar">';for(let i=0;i<max;i++)h+=`<span class="lh ${i<n?'a':'d'}">♥</span>`;return h+'</div>';}
-function shb(n,max){let h='';for(let i=0;i<max;i++)h+=`<span class="sh ${i<n?'a':'d'}">♥</span>`;return h;}
+function lbar(n,max){n=n??0;let h='<div class="lbar">';for(let i=0;i<max;i++)h+=`<span class="lh ${i<n?'a':'d'}">♥</span>`;return h+'</div>';}
+function shb(n,max){n=n??0;let h='';for(let i=0;i<max;i++)h+=`<span class="sh ${i<n?'a':'d'}">♥</span>`;return h;}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
 let _tt;
 function toast(msg,err=false){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=err?'var(--red2)':'var(--bor2)';t.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>t.style.display='none',3500);}
