@@ -91,6 +91,7 @@ class GameState:
         return {
             'phase':self.phase,'players':self.players,
             'lives':{k:int(v) for k,v in self.lives.items()},
+            'lives_list':[int(self.lives.get(p,0)) for p in self.players],
             'eliminated':self.eliminated,'round_idx':self.round_idx,
             'round_seq':round_display_seq(self.round_idx, self.num_players_alive()),
             'num_cards':self.num_cards(),'is_blind':self.is_blind(),
@@ -870,7 +871,7 @@ function renderLobby(){
     `<div class="prow"><span style="font-weight:500">${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>
     <div style="display:flex;align-items:center;gap:.4rem">
       ${p===S.host?'<span class="hbadge host">host</span>':''}
-      ${lbar(S.lives[p]??5,5)}
+      ${(()=>{const idx=S.players.indexOf(p);const v=S.lives_list&&S.lives_list[idx]!==undefined?Number(S.lives_list[idx]):(S.lives[p]??5);return lbar(v,5);})()}
     </div></div>`).join('')||'<div style="padding:.7rem;color:var(--dim);font-size:12px">No players yet</div>';
   document.getElementById('lobby-action').innerHTML=isHost
     ?`<button class="btn btn-gold" onclick="send({action:'start'})">Start game</button><div style="font-size:11px;color:var(--dim);margin-top:.3rem">You are the host</div>`
@@ -914,24 +915,31 @@ function renderGame(){
   const trickFull=ph==='playing'&&s.current_trick.length>=alive.length;
   const isMyPlay=ph==='playing'&&trickP===myName&&!trickFull;
 
-  // Seats
+  // Seats — use lives_list (indexed array) to avoid mobile dict-lookup bugs
   const felt=document.getElementById('felt');
   felt.querySelectorAll('.seat').forEach(e=>e.remove());
+  // Build a reliable lives map from the ordered lives_list array
+  const livesArr = s.lives_list || [];
+  const getLives = (p) => {
+    const idx = s.players.indexOf(p);
+    return idx >= 0 && livesArr[idx] !== undefined ? Number(livesArr[idx]) : 0;
+  };
   const positions=seatPos(alive.length,myIdx>=0?myIdx:0);
   alive.forEach((p,i)=>{
     const pos=positions[i],isMe=p===myName;
     const isActive=(ph==='bidding'&&bidder===p)||(ph==='playing'&&trickP===p);
     const hasBid=s.bids[p]!==undefined,won=s.tricks_won[p]??0;
+    const pLives = getLives(p);
     const seat=document.createElement('div');
     seat.className='seat'; seat.style.left=pos.x+'%'; seat.style.top=pos.y+'%';
     seat.innerHTML=`
-      <div class="avatar${isActive?' my-turn':''}${isMe?' is-me':''}${s.lives[p]<=0?' out':''}">
+      <div class="avatar${isActive?' my-turn':''}${isMe?' is-me':''}${pLives<=0?' out':''}">
         ${p.slice(0,2).toUpperCase()}
         ${hasBid?`<div class="bid-badge">${s.bids[p]}</div>`:''}
         ${ph==='playing'?`<div class="won-badge">${won}/${s.bids[p]??'?'}</div>`:''}
       </div>
       <div class="sname${isMe?' is-me':''}">${esc(p)}</div>
-      <div class="shearts">${shb(Number(s.lives[p]??0),5)}</div>`;
+      <div class="shearts">${shb(pLives,5)}</div>`;
     felt.appendChild(seat);
   });
 
@@ -1073,8 +1081,10 @@ function renderGameOver(){
   const alive=S.players.filter(p=>S.lives[p]>0);
   document.getElementById('go-name').textContent=alive.length===1?alive[0]:'Draw!';
   const sorted=[...S.players].sort((a,b)=>(S.lives[b]||0)-(S.lives[a]||0));
-  document.getElementById('go-stands').innerHTML=sorted.map(p=>
-    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(S.lives[p]!=null?S.lives[p]:0,5)}</div>`).join('');
+  document.getElementById('go-stands').innerHTML=sorted.map(p=>{
+    const pi=S.players.indexOf(p);
+    const v=S.lives_list&&S.lives_list[pi]!==undefined?Number(S.lives_list[pi]):0;
+    return `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(v,5)}</div>`;}).join('');
   document.getElementById('go-action').innerHTML=S.host===myName
     ?`<button class="btn btn-gold" onclick="send({action:'restart'})">Play again</button>`
     :`<div class="wait"><span>Waiting for host</span><span class="dot"></span></div>`;
