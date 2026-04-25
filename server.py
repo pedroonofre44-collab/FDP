@@ -549,7 +549,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .sname{font-size:12px;font-weight:500;color:var(--text);max-width:80px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.6);border-radius:4px;padding:2px 7px;line-height:1.4}
 .sname.is-me{color:var(--green)}
 .shearts{display:flex;gap:2px;justify-content:center}
-.sh{font-size:11px;line-height:1}.sh.alive{color:var(--heart)}.sh.dead{color:var(--dim)}
+.sh{font-size:11px;line-height:1}.sh.alive{color:#e74c3c !important}.sh.dead{color:#2a2a2a !important;opacity:.4}
 .bid-badge{position:absolute;top:-5px;right:-5px;background:var(--sur);border:1px solid var(--gold);border-radius:10px;font-size:10px;font-weight:600;color:var(--gold);padding:1px 5px;line-height:1.4;white-space:nowrap}
 .won-badge{position:absolute;bottom:-5px;right:-5px;background:var(--green-bg);border:1px solid var(--green);border-radius:10px;font-size:10px;font-weight:600;color:var(--green);padding:1px 5px;line-height:1.4}
 .pot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1}
@@ -602,7 +602,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .rbdg.ok{background:var(--green-bg);color:var(--green);border:1px solid rgba(0,184,148,.3)}
 .rbdg.bad{background:var(--red-bg);color:var(--red2);border:1px solid rgba(214,48,49,.3)}
 .lbar{display:flex;gap:2px}
-.lh{font-size:12px}.lh.alive{color:var(--heart)}.lh.dead{color:var(--dim)}
+.lh{font-size:12px}.lh.alive{color:#e74c3c !important}.lh.dead{color:#2a2a2a !important;opacity:.4}
 .gowinner{text-align:center;padding:1.4rem;background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--r);margin-bottom:1rem}
 .goname{font-family:'Cinzel',serif;font-size:1.9rem;font-weight:700;color:var(--gold2)}
 .wait{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:.35rem}
