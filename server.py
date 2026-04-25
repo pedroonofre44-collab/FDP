@@ -842,7 +842,7 @@ function renderGame(){
         ${ph==='playing'?`<div class="won-badge">${won}/${s.bids[p]??'?'}</div>`:''}
       </div>
       <div class="sname${isMe?' is-me':''}">${esc(p)}</div>
-      <div class="shearts">${shb(s.lives[p]!=null?s.lives[p]:0,5)}</div>`;
+      <div class="shearts">${shb(Number(s.lives[p]??0),5)}</div>`;
     felt.appendChild(seat);
   });
 
@@ -915,12 +915,17 @@ function selH(i){ sel=i; renderHand(S.my_hand,true); document.getElementById('bt
 
 function renderResult(){
   document.getElementById('res-title').textContent=`Round ${S.round_idx+1} results`;
+  // Build a lives map from round_results (guaranteed accurate after deduction)
+  const livesMap={};
+  S.round_results.forEach(r=>{ livesMap[r.player]=r.lives; });
+  // Also include players not in round_results (eliminated before this round)
+  S.players.forEach(p=>{ if(livesMap[p]===undefined) livesMap[p]=S.lives[p]??0; });
   document.getElementById('res-body').innerHTML=S.round_results.map(r=>{const ok=r.diff===0;
     return `<div class="rrow"><span style="font-weight:500">${esc(r.player)}${r.player===myName?' <span class="hbadge you">you</span>':''}</span>
     <span style="color:var(--muted);font-size:12px">bid ${r.bid} · won ${r.won}</span>
     <span class="rbdg ${ok?'ok':'bad'}">${ok?'Perfect':'-'+r.diff+' life'+(r.diff!==1?'s':'')}</span></div>`;}).join('');
   document.getElementById('res-lives').innerHTML=S.players.map(p=>
-    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(S.lives[p]!=null?S.lives[p]:0,5)}</div>`).join('');
+    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(livesMap[p]??0,5)}</div>`).join('');
   const isHost=S.host===myName;
   document.getElementById('res-action').innerHTML=isHost
     ?`<button class="btn btn-gold" onclick="send({action:'next_round'})">Next round →</button>`
@@ -940,8 +945,8 @@ function renderGameOver(){
 }
 
 function cr(card,order){const vi=order.indexOf(card.v),si=['Hearts','Spades','Diamonds','Clubs'].indexOf(card.s);return(vi<0?order.length:vi)*4+si;}
-function lbar(n,max){n=n??0;let h='<div class="lbar">';for(let i=0;i<max;i++)h+=`<span class="lh ${i<n?'a':'d'}">♥</span>`;return h+'</div>';}
-function shb(n,max){n=n??0;let h='';for(let i=0;i<max;i++)h+=`<span class="sh ${i<n?'a':'d'}">♥</span>`;return h;}
+function lbar(n,max){n=Number(n??0);let h='<div class="lbar">';for(let i=0;i<max;i++)h+=`<span class="lh ${i<n?'a':'d'}">♥</span>`;return h+'</div>';}
+function shb(n,max){n=Number(n??0);let h='';for(let i=0;i<max;i++)h+=`<span class="sh ${i<n?'a':'d'}">♥</span>`;return h;}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
 let _tt;
 function toast(msg,err=false){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=err?'var(--red2)':'var(--bor2)';t.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>t.style.display='none',3500);}
