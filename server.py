@@ -156,6 +156,37 @@ def start_round(g):
 def next_trick(g):
     g.last_trick=[]; g.current_trick=[]; g.trick_num+=1
 
+async def blind_auto_play(room):
+    """In blind rounds, server reveals and plays each card automatically with delays."""
+    g = room.g
+    alive = g.alive_players()
+    # Play cards one by one in trick order, 1.2s apart so everyone sees each reveal
+    order = alive[g.trick_leader:] + alive[:g.trick_leader]
+    for player in order:
+        await asyncio.sleep(1.2)
+        hand = g.hands.get(player, [])
+        if not hand: continue
+        card = hand.pop(0)
+        g.current_trick.append({'player': player, 'card': card})
+        await broadcast_room(room)
+    # All cards on table — pause 2s then resolve
+    await asyncio.sleep(2.0)
+    winner_entry = min(g.current_trick, key=lambda e: card_rank(e['card'], g.card_order))
+    winner = winner_entry['player']
+    g.tricks_won[winner] += 1
+    g.trick_leader = alive.index(winner)
+    g.last_trick = list(g.current_trick)
+    # Score round (blind round has only 1 trick)
+    results = []
+    for p in alive:
+        bid = g.bids.get(p, 0); won = g.tricks_won[p]; diff = abs(bid - won)
+        g.lives[p] = max(0, g.lives[p] - diff)
+        if g.lives[p] == 0 and p not in g.eliminated: g.eliminated.append(p)
+        results.append({'player':p,'bid':bid,'won':won,'diff':diff,'lives':int(g.lives[p])})
+    g.round_results = results
+    g.phase = 'round_result'
+    await broadcast_room(room)
+
 async def resolve_trick_after_delay(room):
     await asyncio.sleep(2.0)
     g = room.g
@@ -247,7 +278,13 @@ async def ws_handler(request):
                         if sum(g.bids.values())+bid==nc:
                             await send_error(ws,f'Last bidder: cannot bid {nc-sum(g.bids.values())} (total={nc}).'); continue
                     g.bids[current_bidder]=bid; g.bid_idx+=1
-                    if g.bid_idx>=len(alive): g.phase='playing'; g.trick_num=0; next_trick(g)
+                    if g.bid_idx>=len(alive):
+                        g.phase='playing'; g.trick_num=1; next_trick(g)
+                        await broadcast_room(room)
+                        if g.is_blind():
+                            # Blind round: server plays all cards automatically
+                            asyncio.ensure_future(blind_auto_play(room))
+                        continue
                     await broadcast_room(room)
 
                 elif action == 'play_card':
@@ -890,7 +927,11 @@ function renderGame(){
       ph2+=`<div class="lt-label">Last trick — ${esc(winP)} won</div>
         <div class="trick-row">${s.last_trick.map(e=>`<div class="tc ${SC[e.card.s]}" style="width:30px;height:43px;font-size:.78rem;opacity:.55">${e.card.v}<span class="cs">${SY[e.card.s]}</span></div>`).join('')}</div>`;
     }
-    ph2+=`<div class="pot-msg">${esc(trickP||'')} leads</div>`;
+    if(s.is_blind){
+      ph2+=`<div class="pot-msg" style="color:var(--gold)">Revealing cards...</div>`;
+    } else {
+      ph2+=`<div class="pot-msg">${esc(trickP||'')} leads</div>`;
+    }
   }else if(ph==='bidding'){
     const sb=Object.values(s.bids).reduce((a,b)=>a+b,0);
     ph2=`<div class="pot-msg">Bidding<br><span style="opacity:.5;font-size:10px">Total: ${sb} / ${nc}</span></div>`;
@@ -902,13 +943,9 @@ function renderGame(){
   const htEl=document.getElementById('hand-title');
   if(htEl) htEl.textContent=s.is_blind?"Other players' cards (your card is face-down)":'Your hand';
   document.getElementById('bid-panel').style.display=isMyBid?'block':'none';
-  document.getElementById('pbrow').style.display=isMyPlay?'flex':'none';
-  if(isMyPlay && s.is_blind){
-    document.getElementById('btn-play').textContent='Play your card (face-down)';
-    document.getElementById('btn-play').disabled=false;
-  } else if(!isMyPlay || !s.is_blind) {
-    document.getElementById('btn-play').textContent='Play selected card';
-  }
+  // Blind round: server plays automatically, no button needed
+  document.getElementById('pbrow').style.display=(isMyPlay&&!s.is_blind)?'flex':'none';
+  document.getElementById('btn-play').textContent='Play selected card';
 
   if(ph==='bidding'){
     const ti=document.getElementById('ti-hand');
@@ -944,11 +981,15 @@ function renderGame(){
   }
   if(ph==='playing'){
     const ti=document.getElementById('ti-hand');
-    ti.textContent=isMyPlay?'Your turn!':'Waiting for '+esc(trickP||'...');
-    ti.className='ti '+(isMyPlay?'mine':'wait');
-    if(s.is_blind){ renderBlindHand(s.others_hands||{}); }
-    else { renderHand(s.my_hand||[],isMyPlay); }
-    if(isMyPlay) document.getElementById('btn-play').disabled=sel===null;
+    if(s.is_blind){
+      ti.textContent='Cards are being revealed...'; ti.className='ti wait';
+      renderBlindHand(s.others_hands||{});
+    } else {
+      ti.textContent=isMyPlay?'Your turn!':'Waiting for '+esc(trickP||'...');
+      ti.className='ti '+(isMyPlay?'mine':'wait');
+      renderHand(s.my_hand||[],isMyPlay);
+      if(isMyPlay) document.getElementById('btn-play').disabled=sel===null;
+    }
   }
 }
 
