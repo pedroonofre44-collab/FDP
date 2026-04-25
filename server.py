@@ -549,7 +549,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .sname{font-size:12px;font-weight:500;color:var(--text);max-width:80px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(0,0,0,.6);border-radius:4px;padding:2px 7px;line-height:1.4}
 .sname.is-me{color:var(--green)}
 .shearts{display:flex;gap:2px;justify-content:center}
-.sh{font-size:11px;line-height:1}.sh.a{color:var(--heart)}.sh.d{color:var(--dim)}
+.sh{font-size:11px;line-height:1}.sh.alive{color:var(--heart)}.sh.dead{color:var(--dim)}
 .bid-badge{position:absolute;top:-5px;right:-5px;background:var(--sur);border:1px solid var(--gold);border-radius:10px;font-size:10px;font-weight:600;color:var(--gold);padding:1px 5px;line-height:1.4;white-space:nowrap}
 .won-badge{position:absolute;bottom:-5px;right:-5px;background:var(--green-bg);border:1px solid var(--green);border-radius:10px;font-size:10px;font-weight:600;color:var(--green);padding:1px 5px;line-height:1.4}
 .pot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1}
@@ -602,7 +602,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .rbdg.ok{background:var(--green-bg);color:var(--green);border:1px solid rgba(0,184,148,.3)}
 .rbdg.bad{background:var(--red-bg);color:var(--red2);border:1px solid rgba(214,48,49,.3)}
 .lbar{display:flex;gap:2px}
-.lh{font-size:12px}.lh.a{color:var(--heart)}.lh.d{color:var(--dim)}
+.lh{font-size:12px}.lh.alive{color:var(--heart)}.lh.dead{color:var(--dim)}
 .gowinner{text-align:center;padding:1.4rem;background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--r);margin-bottom:1rem}
 .goname{font-family:'Cinzel',serif;font-size:1.9rem;font-weight:700;color:var(--gold2)}
 .wait{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:.35rem}
@@ -770,6 +770,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 
 <div id="toast"></div>
 
+
 <!-- CHAT BUTTON -->
 <button id="chat-btn" onclick="toggleChat()">
   💬
@@ -854,13 +855,13 @@ function seatPos(n,myIdx){
 
 function render(){
   if(!S) return;
-  if(!myName||!S.players.includes(myName)){ show('s-join'); return; }
+if(!myName||!S.players.includes(myName)){ show('s-join'); return; }
   document.getElementById('s-result').classList.remove('active');
   document.getElementById('s-gameover').classList.remove('active');
   const ph=S.phase;
   if(ph==='lobby'){ renderLobby(); show('s-lobby'); }
   else{ show('s-game'); renderGame();
-    if(ph==='round_result') renderResult();
+    if(ph==='round_result' && S.round_results && S.round_results.length>0) renderResult();
     else if(ph==='game_over') renderGameOver();
   }
 }
@@ -1060,17 +1061,24 @@ function renderBlindHand(othersHands){
 
 function renderResult(){
   document.getElementById('res-title').textContent=`Round ${S.round_idx+1} results`;
-  // Build a lives map from round_results (guaranteed accurate after deduction)
-  const livesMap={};
-  S.round_results.forEach(r=>{ livesMap[r.player]=r.lives; });
-  // Also include players not in round_results (eliminated before this round)
-  S.players.forEach(p=>{ if(livesMap[p]===undefined) livesMap[p]=S.lives[p]??0; });
+  // Use lives_list (server-sent ordered array) as the single source of truth
+  const getLivesForResult = (p) => {
+    const idx = S.players.indexOf(p);
+    // Primary: lives_list (guaranteed int array from server)
+    if(S.lives_list && S.lives_list[idx] !== undefined) return Number(S.lives_list[idx]);
+    // Fallback: round_results r.lives
+    const rr = S.round_results.find(r=>r.player===p);
+    if(rr) return Number(rr.lives);
+    return 0;
+  };
   document.getElementById('res-body').innerHTML=S.round_results.map(r=>{const ok=r.diff===0;
     return `<div class="rrow"><span style="font-weight:500">${esc(r.player)}${r.player===myName?' <span class="hbadge you">you</span>':''}</span>
     <span style="color:var(--muted);font-size:12px">bid ${r.bid} · won ${r.won}</span>
     <span class="rbdg ${ok?'ok':'bad'}">${ok?'Perfect':'-'+r.diff+' life'+(r.diff!==1?'s':'')}</span></div>`;}).join('');
-  document.getElementById('res-lives').innerHTML=S.players.map(p=>
-    `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(livesMap[p]??0,5)}</div>`).join('');
+  document.getElementById('res-lives').innerHTML=S.players.map(p=>{
+    const v = getLivesForResult(p);
+    return `<div class="rrow"><span>${esc(p)}${p===myName?' <span class="hbadge you">you</span>':''}</span>${lbar(v,5)}</div>`;
+  }).join('');
   const isHost=S.host===myName;
   document.getElementById('res-action').innerHTML=isHost
     ?`<button class="btn btn-gold" onclick="send({action:'next_round'})">Next round →</button>`
@@ -1092,8 +1100,8 @@ function renderGameOver(){
 }
 
 function cr(card,order){const vi=order.indexOf(card.v),si=['Hearts','Spades','Diamonds','Clubs'].indexOf(card.s);return(vi<0?order.length:vi)*4+si;}
-function lbar(n,max){n=Number(n??0);let h='<div class="lbar">';for(let i=0;i<max;i++)h+=`<span class="lh ${i<n?'a':'d'}">♥</span>`;return h+'</div>';}
-function shb(n,max){n=Number(n??0);let h='';for(let i=0;i<max;i++)h+=`<span class="sh ${i<n?'a':'d'}">♥</span>`;return h;}
+function lbar(n,max){n=Number(n??0);let h='<div class="lbar">';for(let i=0;i<max;i++)h+=`<span class="lh ${i<n?'alive':'dead'}">♥</span>`;return h+'</div>';}
+function shb(n,max){n=Number(n??0);let h='';for(let i=0;i<max;i++)h+=`<span class="sh ${i<n?'alive':'dead'}">♥</span>`;return h;}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
 let _tt;
 function toast(msg,err=false){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=err?'var(--red2)':'var(--bor2)';t.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>t.style.display='none',3500);}
