@@ -9,17 +9,29 @@ import aiohttp
 
 BASE_ORDER  = ['3','2','A','K','Q','J','7','6','5','4']
 SUITS       = ['Hearts','Spades','Diamonds','Clubs']
-# Round 0 is always the blind round (1 card, see others not yourself)
-# Rounds 1+ cycle through: 2,3,4,5,6,7,8,7,6,5,4,3 repeating
-NORMAL_CYCLE = [2,3,4,5,6,7,8,7,6,5,4,3]
+# Cycle is dynamic based on player count.
+# Max cards = (40-1) // num_players (reserve 1 for trump card)
+# Cycle: blind, 2..max, max-1..2, blind (repeating)
 
-def round_num_cards(idx):
-    if idx == 0: return (1, True)   # blind round
-    return (NORMAL_CYCLE[(idx - 1) % len(NORMAL_CYCLE)], False)
+def build_cycle(num_players):
+    max_nc = (40 - 1) // max(num_players, 1)
+    max_nc = min(max_nc, 8)   # cap at 8 for small player counts
+    up   = list(range(2, max_nc + 1))
+    # If max is capped (can't reach 8), play the peak twice
+    peak = [max_nc, max_nc] if max_nc < 8 else [max_nc]
+    down = list(range(max_nc - 1, 1, -1))
+    normal = up[:-1] + peak + down   # up without last + peak twice + down
+    return [(1, True)] + [(n, False) for n in normal]
 
-def round_display_seq(round_idx, window=16):
+def round_num_cards(idx, num_players=2):
+    cycle = build_cycle(num_players)
+    return cycle[idx % len(cycle)]
+
+def round_display_seq(round_idx, num_players=2, window=16):
     start = max(0, round_idx - 3)
-    return [{'idx': i, 'nc': round_num_cards(i)[0], 'blind': round_num_cards(i)[1]}
+    return [{'idx': i,
+             'nc':  round_num_cards(i, num_players)[0],
+             'blind': round_num_cards(i, num_players)[1]}
             for i in range(start, start + window)]
 
 def build_order(trump_value):
@@ -69,17 +81,21 @@ class GameState:
         self.host=None; self.first_bidder_idx=0
     def alive_players(self):
         return [p for p in self.players if self.lives.get(p,0)>0]
+    def num_players_alive(self):
+        return max(len(self.alive_players()), 1)
     def num_cards(self):
-        return round_num_cards(self.round_idx)[0]
+        return round_num_cards(self.round_idx, self.num_players_alive())[0]
     def is_blind(self):
-        return round_num_cards(self.round_idx)[1]
+        return round_num_cards(self.round_idx, self.num_players_alive())[1]
     def to_public(self):
         return {
             'phase':self.phase,'players':self.players,
             'lives':{k:int(v) for k,v in self.lives.items()},
             'eliminated':self.eliminated,'round_idx':self.round_idx,
-            'round_seq':round_display_seq(self.round_idx),
-            'num_cards':self.num_cards(),'is_blind':self.is_blind(),'bids':self.bids,
+            'round_seq':round_display_seq(self.round_idx, self.num_players_alive()),
+            'num_cards':self.num_cards(),'is_blind':self.is_blind(),
+            'cycle':[(x,b) for x,b in build_cycle(self.num_players_alive())],
+            'bids':self.bids,
             'tricks_won':self.tricks_won,'current_trick':self.current_trick,
             'last_trick':self.last_trick,'trick_num':self.trick_num,
             'trick_leader':self.trick_leader,'bid_idx':self.bid_idx,
@@ -868,8 +884,23 @@ function renderGame(){
   document.getElementById('round-tag').textContent=s.is_blind
     ? `Round ${s.round_idx+1} · 👁 Blind round`
     : `Round ${s.round_idx+1} · ${nc} card${nc>1?'s':''}`;
-  document.getElementById('seq-track').innerHTML=s.round_seq.map(r=>
-    `<div class="spip ${r.idx<s.round_idx?'done':r.idx===s.round_idx?'now':''}">${r.blind?'👁':r.nc}</div>`).join('');
+  // Show full cycle, mark position within current cycle
+  if(s.cycle && s.cycle.length){
+    const cycleLen = s.cycle.length;
+    const posInCycle = s.round_idx % cycleLen;
+    document.getElementById('seq-track').innerHTML = s.cycle.map(([nc,blind], i) => {
+      const isPast   = i < posInCycle;
+      const isCurrent= i === posInCycle;
+      const cls = isPast ? 'done' : isCurrent ? 'now' : '';
+      const label = blind ? '👁' : nc;
+      return `<div class="spip ${cls}" title="${blind?'Blind round':nc+' cards'}">${label}</div>`;
+    }).join('');
+  } else {
+    document.getElementById('seq-track').innerHTML=s.round_seq.map(r=>{
+      const cls=r.idx<s.round_idx?'done':r.idx===s.round_idx?'now':'';
+      return `<div class="spip ${cls}">${r.blind?'👁':r.nc}</div>`;
+    }).join('');
+  }
   const tc=s.trump_card;
   document.getElementById('trump-chip').innerHTML=tc?`<span class="${SC[tc.s]}">${tc.v}${SY[tc.s]}</span>`:'—';
   document.getElementById('order-pills').innerHTML=s.card_order.map((v,i)=>
