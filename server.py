@@ -9,16 +9,13 @@ import aiohttp
 
 BASE_ORDER  = ['3','2','A','K','Q','J','7','6','5','4']
 SUITS       = ['Hearts','Spades','Diamonds','Clubs']
-# Each entry: (num_cards, is_blind)
-# Blind round = 1 card, players see everyone else's card but not their own
-ROUND_CYCLE = [
-    (1, True),   # blind
-    (2, False),(3, False),(4, False),(5, False),(6, False),(7, False),(8, False),
-    (7, False),(6, False),(5, False),(4, False),(3, False),
-]
+# Round 0 is always the blind round (1 card, see others not yourself)
+# Rounds 1+ cycle through: 2,3,4,5,6,7,8,7,6,5,4,3 repeating
+NORMAL_CYCLE = [2,3,4,5,6,7,8,7,6,5,4,3]
 
 def round_num_cards(idx):
-    return ROUND_CYCLE[idx % len(ROUND_CYCLE)]  # returns (nc, is_blind)
+    if idx == 0: return (1, True)   # blind round
+    return (NORMAL_CYCLE[(idx - 1) % len(NORMAL_CYCLE)], False)
 
 def round_display_seq(round_idx, window=16):
     start = max(0, round_idx - 3)
@@ -279,7 +276,7 @@ async def ws_handler(request):
                             await send_error(ws,f'Last bidder: cannot bid {nc-sum(g.bids.values())} (total={nc}).'); continue
                     g.bids[current_bidder]=bid; g.bid_idx+=1
                     if g.bid_idx>=len(alive):
-                        g.phase='playing'; g.trick_num=1; next_trick(g)
+                        g.phase='playing'; g.trick_num=0; next_trick(g)
                         await broadcast_room(room)
                         if g.is_blind():
                             # Blind round: server plays all cards automatically
