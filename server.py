@@ -786,7 +786,12 @@ function submitBid(){
   if(isNaN(v)||v<0||v>nc){ toast('Bid 0–'+nc,true); return; }
   send({action:'bid',bid:v});
 }
-function playCard(){ if(sel===null){ toast('Select a card',true); return; } send({action:'play_card',card_idx:sel}); sel=null; }
+function playCard(){
+  // Blind round: player has 1 hidden card, always index 0
+  if(S && S.is_blind){ send({action:'play_card',card_idx:0}); sel=null; return; }
+  if(sel===null){ toast('Select a card',true); return; }
+  send({action:'play_card',card_idx:sel}); sel=null;
+}
 
 function seatPos(n,myIdx){
   const rx=41,ry=36;
@@ -900,9 +905,8 @@ function renderGame(){
   document.getElementById('pbrow').style.display=isMyPlay?'flex':'none';
   if(isMyPlay && s.is_blind){
     document.getElementById('btn-play').textContent='Play your card (face-down)';
-    // Auto-select the only card (index 0) since player can't see it
-    if(S.my_hand&&S.my_hand.length>0){ sel=0; document.getElementById('btn-play').disabled=false; }
-  } else {
+    document.getElementById('btn-play').disabled=false;
+  } else if(!isMyPlay || !s.is_blind) {
     document.getElementById('btn-play').textContent='Play selected card';
   }
 
