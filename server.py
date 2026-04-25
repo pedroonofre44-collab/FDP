@@ -487,9 +487,9 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .pot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1}
 .pot-inner{display:flex;flex-direction:column;align-items:center;gap:.4rem;max-width:300px}
 .trick-row{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
-.tc{width:52px;height:74px;border-radius:7px;background:#131313;border:1px solid #2a2a2a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;position:relative;flex-shrink:0}
-.tc.winner-card{border-color:var(--gold);box-shadow:0 0 8px rgba(201,168,76,.4)}
-.tc .cs{font-size:.7rem;opacity:.65}
+.tc{width:58px;height:82px;border-radius:7px;background:#131313;border:1px solid #2a2a2a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.5rem;position:relative;flex-shrink:0}
+.tc.winner-card{}
+.tc .cs{font-size:.9rem;opacity:.75}
 .tc.hearts{color:var(--heart)}.tc.spades{color:var(--spade)}.tc.diamonds{color:var(--diamond)}.tc.clubs{color:var(--club)}
 .tc-name{font-size:11px;color:rgba(255,255,255,.45);text-align:center;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
 .trick-entry{display:flex;flex-direction:column;align-items:center}
@@ -502,16 +502,16 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
 .ti.mine{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold)}
 .ti.wait{background:var(--sur2);color:var(--muted);border:1px solid var(--bor)}
 .cards-row{display:flex;gap:5px;flex-wrap:wrap;align-items:flex-end;justify-content:center}
-.hcard{width:62px;height:88px;border-radius:8px;background:var(--sur2);border:1.5px solid var(--bor2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.4rem;transition:transform .11s,border-color .11s,box-shadow .11s;user-select:none;flex-shrink:0}
+.hcard{width:66px;height:94px;border-radius:8px;background:var(--sur2);border:1.5px solid var(--bor2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.6rem;transition:transform .11s,border-color .11s,box-shadow .11s;user-select:none;flex-shrink:0}
 .hcard.pick{cursor:pointer}.hcard.pick:hover{transform:translateY(-10px)}
 .hcard.selected{transform:translateY(-14px);border-color:var(--gold);box-shadow:0 0 16px var(--gold-dim)}
-.hcard .cs{font-size:.75rem;opacity:.7}
+.hcard .cs{font-size:.95rem;opacity:.75}
 .hcard.hearts{color:var(--heart)}.hcard.spades{color:var(--spade)}.hcard.diamonds{color:var(--diamond)}.hcard.clubs{color:var(--club)}
 .pbrow{display:flex;align-items:center;gap:.75rem;margin-top:.55rem;justify-content:center}
 #bid-panel{background:var(--sur);border-top:1px solid var(--bor);padding:.65rem 1rem;flex-shrink:0}
 .bhand{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:.55rem}
-.bcard{width:50px;height:70px;border-radius:6px;background:var(--sur2);border:1px solid var(--bor);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.15rem}
-.bcard .cs{font-size:.68rem;opacity:.7}
+.bcard{width:54px;height:76px;border-radius:6px;background:var(--sur2);border:1px solid var(--bor);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.3rem}
+.bcard .cs{font-size:.85rem;opacity:.75}
 .bcard.hearts{color:var(--heart)}.bcard.spades{color:var(--spade)}.bcard.diamonds{color:var(--diamond)}.bcard.clubs{color:var(--club)}
 .bidr{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap}
 .binp{width:72px;background:var(--sur2);border:1px solid var(--bor2);border-radius:var(--r3);color:var(--text);padding:.45rem .65rem;font-size:1.1rem;font-weight:600;font-family:'Inter',sans-serif;outline:none;text-align:center;transition:border .2s}
@@ -654,6 +654,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
       <span class="ti mine">Your turn to bid</span>
     </div>
     <div class="bhand" id="bid-hand"></div>
+    <div class="bnote" id="bid-note" style="display:none"></div>
     <div class="bidr">
       <div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:.3rem">Tricks (0 to <span id="bid-max"></span>)</div>
@@ -661,7 +662,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
       </div>
       <button class="btn btn-gold" onclick="submitBid()">Confirm bid</button>
     </div>
-    <div class="bnote" id="bid-note" style="display:none"></div>
+
   </div>
   <div id="hand-panel" style="display:none">
     <div class="hdr">
@@ -821,7 +822,8 @@ function renderGame(){
   const tti=(s.trick_leader+s.current_trick.length)%Math.max(1,alive.length);
   const trickP=ph==='playing'?alive[tti]:null;
   const isMyBid=ph==='bidding'&&bidder===myName;
-  const isMyPlay=ph==='playing'&&trickP===myName;
+  const trickFull=ph==='playing'&&s.current_trick.length>=alive.length;
+  const isMyPlay=ph==='playing'&&trickP===myName&&!trickFull;
 
   // Seats
   const felt=document.getElementById('felt');
@@ -853,7 +855,7 @@ function renderGame(){
     const full=s.current_trick.length>=alive.length;
     ph2+=`<div class="trick-row">${s.current_trick.map(e=>{const w=e.player===winP;
       return `<div class="trick-entry"><div class="tc-name">${esc(e.player)}</div>
-        <div class="tc ${SC[e.card.s]}${w?' winner-card':''}">${e.card.v}<span class="cs">${SY[e.card.s]}</span></div>
+        <div class="tc ${SC[e.card.s]}">${e.card.v}<span class="cs">${SY[e.card.s]}</span></div>
       </div>`;}).join('')}</div>`;
     if(full) ph2+=`<div class="pot-msg" style="color:var(--gold2)">${esc(winP)} wins this trick!</div>`;
     else if(trickP) ph2+=`<div class="pot-msg">${esc(trickP)}'s turn</div>`;
@@ -884,7 +886,8 @@ function renderGame(){
   }
   if(isMyBid){
     document.getElementById('bid-max').textContent=nc;
-    document.getElementById('bid-input').max=nc; document.getElementById('bid-input').min=0;
+    const binp=document.getElementById('bid-input');
+    binp.max=nc; binp.min=0; binp.value='';
     document.getElementById('bid-hand').innerHTML=(s.my_hand||[]).map(c=>
       `<div class="bcard ${SC[c.s]}">${c.v}<span class="cs">${SY[c.s]}</span></div>`).join('');
     const isLast=s.bid_idx===alive.length-1;
