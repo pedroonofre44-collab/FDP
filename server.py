@@ -9,14 +9,21 @@ import aiohttp
 
 BASE_ORDER  = ['3','2','A','K','Q','J','7','6','5','4']
 SUITS       = ['Hearts','Spades','Diamonds','Clubs']
-ROUND_CYCLE = [2,3,4,5,6,7,8,7,6,5,4,3]
+# Each entry: (num_cards, is_blind)
+# Blind round = 1 card, players see everyone else's card but not their own
+ROUND_CYCLE = [
+    (1, True),   # blind
+    (2, False),(3, False),(4, False),(5, False),(6, False),(7, False),(8, False),
+    (7, False),(6, False),(5, False),(4, False),(3, False),
+]
 
 def round_num_cards(idx):
-    return ROUND_CYCLE[idx % len(ROUND_CYCLE)]
+    return ROUND_CYCLE[idx % len(ROUND_CYCLE)]  # returns (nc, is_blind)
 
 def round_display_seq(round_idx, window=16):
     start = max(0, round_idx - 3)
-    return [{'idx': i, 'nc': round_num_cards(i)} for i in range(start, start + window)]
+    return [{'idx': i, 'nc': round_num_cards(i)[0], 'blind': round_num_cards(i)[1]}
+            for i in range(start, start + window)]
 
 def build_order(trump_value):
     if trump_value not in BASE_ORDER: return BASE_ORDER[:]
@@ -66,13 +73,16 @@ class GameState:
     def alive_players(self):
         return [p for p in self.players if self.lives.get(p,0)>0]
     def num_cards(self):
-        return round_num_cards(self.round_idx)
+        return round_num_cards(self.round_idx)[0]
+    def is_blind(self):
+        return round_num_cards(self.round_idx)[1]
     def to_public(self):
         return {
-            'phase':self.phase,'players':self.players,'lives':self.lives,
+            'phase':self.phase,'players':self.players,
+            'lives':{k:int(v) for k,v in self.lives.items()},
             'eliminated':self.eliminated,'round_idx':self.round_idx,
             'round_seq':round_display_seq(self.round_idx),
-            'num_cards':self.num_cards(),'bids':self.bids,
+            'num_cards':self.num_cards(),'is_blind':self.is_blind(),'bids':self.bids,
             'tricks_won':self.tricks_won,'current_trick':self.current_trick,
             'last_trick':self.last_trick,'trick_num':self.trick_num,
             'trick_leader':self.trick_leader,'bid_idx':self.bid_idx,
@@ -82,7 +92,14 @@ class GameState:
         }
     def to_player(self, name):
         pub = self.to_public()
-        pub['my_hand'] = self.hands.get(name, [])
+        if self.is_blind():
+            # Blind round: player sees all OTHER hands, not their own
+            pub['my_hand'] = []   # own card hidden
+            pub['others_hands'] = {p: self.hands.get(p,[])
+                                   for p in self.alive_players() if p != name}
+        else:
+            pub['my_hand'] = self.hands.get(name, [])
+            pub['others_hands'] = {}
         pub['my_name'] = name
         return pub
 
@@ -666,7 +683,7 @@ h3{font-family:'Cinzel',serif;font-weight:400;font-size:.85rem;color:var(--gold)
   </div>
   <div id="hand-panel" style="display:none">
     <div class="hdr">
-      <div class="htitle">Your hand</div>
+      <div class="htitle" id="hand-title">Your hand</div>
       <div id="ti-hand" class="ti wait">Waiting...</div>
     </div>
     <div class="cards-row" id="hand-cards"></div>
@@ -809,9 +826,11 @@ function renderGame(){
   const s=S,ph=s.phase,nc=s.num_cards;
   const alive=s.players.filter(p=>s.lives[p]>0);
   const myIdx=alive.indexOf(myName);
-  document.getElementById('round-tag').textContent=`Round ${s.round_idx+1} · ${nc} cards`;
+  document.getElementById('round-tag').textContent=s.is_blind
+    ? `Round ${s.round_idx+1} · 👁 Blind round`
+    : `Round ${s.round_idx+1} · ${nc} card${nc>1?'s':''}`;
   document.getElementById('seq-track').innerHTML=s.round_seq.map(r=>
-    `<div class="spip ${r.idx<s.round_idx?'done':r.idx===s.round_idx?'now':''}">${r.nc}</div>`).join('');
+    `<div class="spip ${r.idx<s.round_idx?'done':r.idx===s.round_idx?'now':''}">${r.blind?'👁':r.nc}</div>`).join('');
   const tc=s.trump_card;
   document.getElementById('trump-chip').innerHTML=tc?`<span class="${SC[tc.s]}">${tc.v}${SY[tc.s]}</span>`:'—';
   document.getElementById('order-pills').innerHTML=s.card_order.map((v,i)=>
@@ -875,21 +894,43 @@ function renderGame(){
 
   // Panels
   document.getElementById('hand-panel').style.display=(ph==='bidding'||ph==='playing')?'block':'none';
+  const htEl=document.getElementById('hand-title');
+  if(htEl) htEl.textContent=s.is_blind?"Other players' cards (your card is face-down)":'Your hand';
   document.getElementById('bid-panel').style.display=isMyBid?'block':'none';
   document.getElementById('pbrow').style.display=isMyPlay?'flex':'none';
+  if(isMyPlay && s.is_blind){
+    document.getElementById('btn-play').textContent='Play your card (face-down)';
+    // Auto-select the only card (index 0) since player can't see it
+    if(S.my_hand&&S.my_hand.length>0){ sel=0; document.getElementById('btn-play').disabled=false; }
+  } else {
+    document.getElementById('btn-play').textContent='Play selected card';
+  }
 
   if(ph==='bidding'){
     const ti=document.getElementById('ti-hand');
     if(isMyBid){ ti.textContent='Place your bid below'; ti.className='ti mine'; }
     else{ ti.textContent='Waiting for '+esc(s.bid_order[s.bid_idx]||'')+' to bid'; ti.className='ti wait'; }
-    renderHand(s.my_hand||[],false);
+    if(s.is_blind){ renderBlindHand(s.others_hands||{}); }
+    else{ renderHand(s.my_hand||[],false); }
   }
   if(isMyBid){
     document.getElementById('bid-max').textContent=nc;
     const binp=document.getElementById('bid-input');
     binp.max=nc; binp.min=0; binp.value='';
-    document.getElementById('bid-hand').innerHTML=(s.my_hand||[]).map(c=>
-      `<div class="bcard ${SC[c.s]}">${c.v}<span class="cs">${SY[c.s]}</span></div>`).join('');
+    if(s.is_blind){
+      // Show others' cards as bid reference
+      let bhtml='';
+      Object.entries(s.others_hands||{}).forEach(([player,cards])=>{
+        bhtml+=`<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-right:8px">
+          <div style="font-size:10px;color:var(--muted)">${esc(player)}</div>
+          ${cards.map(c=>`<div class="bcard ${SC[c.s]}">${c.v}<span class="cs">${SY[c.s]}</span></div>`).join('')}
+        </div>`;
+      });
+      document.getElementById('bid-hand').innerHTML=bhtml||'<span style="color:var(--dim);font-size:12px">Waiting for cards...</span>';
+    } else {
+      document.getElementById('bid-hand').innerHTML=(s.my_hand||[]).map(c=>
+        `<div class="bcard ${SC[c.s]}">${c.v}<span class="cs">${SY[c.s]}</span></div>`).join('');
+    }
     const isLast=s.bid_idx===alive.length-1;
     const noteEl=document.getElementById('bid-note');
     if(isLast){ const sb=Object.values(s.bids).reduce((a,b)=>a+b,0);
@@ -901,7 +942,8 @@ function renderGame(){
     const ti=document.getElementById('ti-hand');
     ti.textContent=isMyPlay?'Your turn!':'Waiting for '+esc(trickP||'...');
     ti.className='ti '+(isMyPlay?'mine':'wait');
-    renderHand(s.my_hand||[],isMyPlay);
+    if(s.is_blind){ renderBlindHand(s.others_hands||{}); }
+    else { renderHand(s.my_hand||[],isMyPlay); }
     if(isMyPlay) document.getElementById('btn-play').disabled=sel===null;
   }
 }
@@ -912,6 +954,28 @@ function renderHand(hand,pick){
       onclick="${pick?`selH(${i})`:''}">${c.v}<span class="cs">${SY[c.s]}</span></div>`).join('');
 }
 function selH(i){ sel=i; renderHand(S.my_hand,true); document.getElementById('btn-play').disabled=false; }
+
+function renderBlindHand(othersHands){
+  // Show each other player's card(s) labelled, plus a face-down card for self
+  const ph=S.phase; const nc=S.num_cards;
+  let html='<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;justify-content:center">';
+  // Face-down card for self
+  html+=`<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+    <div style="font-size:11px;color:var(--green);font-weight:500">You</div>
+    <div class="hcard" style="cursor:default;background:#111;border-style:dashed;border-color:#444;color:#333;font-size:2rem">?</div>
+  </div>`;
+  // Other players' visible cards
+  Object.entries(othersHands).forEach(([player, cards])=>{
+    html+=`<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="font-size:11px;color:var(--muted);font-weight:500">${esc(player)}</div>
+      <div style="display:flex;gap:4px">
+        ${cards.map(c=>`<div class="hcard ${SC[c.s]}" style="cursor:default">${c.v}<span class="cs">${SY[c.s]}</span></div>`).join('')}
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  document.getElementById('hand-cards').innerHTML=html;
+}
 
 function renderResult(){
   document.getElementById('res-title').textContent=`Round ${S.round_idx+1} results`;
